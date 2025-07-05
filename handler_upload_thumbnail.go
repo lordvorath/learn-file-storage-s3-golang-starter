@@ -1,10 +1,13 @@
 package main
 
 import (
-	"encoding/base64"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
@@ -47,10 +50,13 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	}
 	defer file.Close()
 
-	mediaType := header.Header.Get("Content-Type")
-	imageData, err := io.ReadAll(file)
+	mediaType, _, err := mime.ParseMediaType(header.Header.Get("Content-Type"))
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't read image", err)
+		respondWithError(w, http.StatusBadRequest, "Couldn't parse media type", err)
+		return
+	}
+	if mediaType != "image/png" && mediaType != "image/jpeg" {
+		respondWithError(w, http.StatusBadRequest, "Invalid media type", err)
 		return
 	}
 
@@ -65,12 +71,29 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	base64image := base64.StdEncoding.EncodeToString(imageData)
-	//thumbURL := fmt.Sprintf("http://localhost:%s/api/thumbnails/%s", cfg.port, videoID)
-	dataURL := fmt.Sprintf("data:%s;base64,%s", mediaType, base64image)
-	vidMetadata.ThumbnailURL = &dataURL
+	fileExtension := strings.Split(mediaType, "/")[1]
+	fileName := fmt.Sprintf("%s.%s", videoID, fileExtension)
+	filePath := filepath.Join(cfg.assetsRoot, fileName)
+	fh, err := os.Create(filePath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't create thumbnail file", err)
+		return
+	}
 
-	cfg.db.UpdateVideo(vidMetadata)
+	_, err = io.Copy(fh, file)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't write to thumbnail file", err)
+		return
+	}
+
+	thumbURL := fmt.Sprintf("http://localhost:%s/assets/%s", cfg.port, fileName)
+	vidMetadata.ThumbnailURL = &thumbURL
+
+	err = cfg.db.UpdateVideo(vidMetadata)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't update database", err)
+		return
+	}
 
 	respondWithJSON(w, http.StatusOK, vidMetadata)
 }
