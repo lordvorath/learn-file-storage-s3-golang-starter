@@ -22,6 +22,7 @@ type apiConfig struct {
 	assetsRoot       string
 	s3Client         *s3.Client
 	s3Bucket         string
+	cfDomain         string
 	s3Region         string
 	s3CfDistribution string
 	port             string
@@ -65,6 +66,11 @@ func main() {
 		log.Fatal("S3_BUCKET environment variable is not set")
 	}
 
+	cfDomain := os.Getenv("CLOUDFRONT_DOMAIN")
+	if cfDomain == "" {
+		log.Fatal("CLOUDFRONT_DOMAIN environment variable is not set")
+	}
+
 	s3Region := os.Getenv("S3_REGION")
 	if s3Region == "" {
 		log.Fatal("S3_REGION environment variable is not set")
@@ -95,6 +101,7 @@ func main() {
 		assetsRoot:       assetsRoot,
 		s3Client:         s3Client,
 		s3Bucket:         s3Bucket,
+		cfDomain:         cfDomain,
 		s3Region:         s3Region,
 		s3CfDistribution: s3CfDistribution,
 		port:             port,
